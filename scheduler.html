@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>목표 스케줄러 — 멀티 task</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#181b22; --panel2:#1f232c; --line:#2a2f3a;
+    --text:#e7e9ee; --muted:#9aa3b2; --accent:#6c8cff; --accent2:#3b4a7a;
+    --done:#3ecf8e; --chip:#262b36; --danger:#ff6b6b; --coord:#ffb454;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;
+    background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header .spacer{flex:1}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;font-size:13px}
+  .btn{background:var(--accent);color:#fff;padding:8px 13px;font-weight:600}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  .btn.sm{padding:5px 9px;font-size:12px}
+  main{display:flex;height:calc(100vh - 51px)}
+  /* sidebar */
+  .side{width:220px;border-right:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel);flex:none}
+  .side .sec{padding:10px 12px;border-bottom:1px solid var(--line)}
+  .side .sec h4{margin:0 0 8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .node{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:3px;border:1px solid transparent}
+  .node:hover{background:var(--panel2)}
+  .node.active{background:var(--panel2);border-color:var(--accent2)}
+  .node .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .node .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .node .del{color:var(--muted);font-size:12px;background:none;padding:0 2px;display:none}
+  .node:hover .del{display:block}
+  .coordnode{border:1px solid var(--coord)}
+  .feed{flex:1;overflow:auto;padding:10px 12px}
+  .feed h4{margin:0 0 8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .fitem{font-size:11.5px;color:var(--muted);padding:5px 0;border-bottom:1px dashed var(--line);line-height:1.4}
+  .fitem b{color:var(--text)}
+  /* center */
+  .center{flex:1.25;border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+  .calhead{display:flex;align-items:center;gap:8px;padding:11px 14px}
+  .calhead h2{font-size:14px;margin:0;flex:1}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px 10px;overflow:auto}
+  .dow{text-align:center;font-size:11px;color:var(--muted);padding:3px 0}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:78px;max-height:120px;padding:5px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden}
+  .cell:hover{border-color:var(--accent2)}
+  .cell.out{opacity:.32}
+  .cell.today{border-color:var(--accent)}
+  .cell .d{font-size:11px;color:var(--muted)}
+  .cell.today .d{color:var(--accent);font-weight:700}
+  .task{font-size:10.5px;border-radius:4px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid;min-width:0;max-width:100%;flex:none}
+  .task.done{text-decoration:line-through;opacity:.6}
+  .more{font-size:10px;color:var(--muted)}
+  .roadmap{padding:10px 14px;border-top:1px solid var(--line);max-height:200px;overflow:auto}
+  .roadmap h3{font-size:12px;margin:0 0 6px;color:var(--muted)}
+  .rgroup{margin-bottom:8px}
+  .rgroup .gh{font-size:12px;font-weight:700;margin-bottom:3px}
+  .rweek{font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .rweek b{color:var(--accent)}
+  /* chat */
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .chathead{padding:9px 14px;border-bottom:1px solid var(--line);font-size:13px;display:flex;align-items:center;gap:8px}
+  .chathead .dot{width:10px;height:10px;border-radius:50%}
+  .notice{font-size:11.5px;background:rgba(255,180,84,.12);border:1px solid var(--coord);color:#ffce8a;border-radius:8px;padding:6px 10px;margin:8px 14px 0;line-height:1.4}
+  .chat{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:90%;padding:9px 12px;border-radius:12px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:3px}
+  .msg.assistant{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);border-bottom-left-radius:3px}
+  .msg.sys{align-self:center;color:var(--muted);font-size:12px;background:transparent}
+  .quick{display:flex;gap:6px;padding:6px 12px;flex-wrap:wrap;border-top:1px solid var(--line)}
+  .composer{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+  .composer textarea{flex:1;resize:none;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13.5px;max-height:120px}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;width:430px;max-width:92vw;max-height:88vh;overflow:auto}
+  .modal h3{margin:0 0 14px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .daygroup{margin:8px 0}
+  .daygroup .gh{font-size:12px;font-weight:700;margin-bottom:4px}
+  .dayitem{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;margin-bottom:4px}
+  .dayitem input[type=checkbox]{width:16px;height:16px;flex:none}
+  .dayitem span{flex:1;font-size:13px}
+  .dayitem span.done{color:var(--done);text-decoration:line-through}
+  .dayitem .x{color:var(--danger);background:none;font-size:14px;padding:0 4px}
+  .addrow{display:flex;gap:6px;margin-top:8px}
+  .addrow input{flex:1}
+  .addrow select{flex:none;width:120px}
+  .loading{color:var(--muted)}
+  .pill{font-size:11px;background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 9px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎯 멀티 task 스케줄러</h1>
+  <span class="spacer"></span>
+  <span class="pill" id="modelPill">—</span>
+  <button class="btn ghost sm" id="setBtn">⚙ 설정</button>
+</header>
+<main>
+  <!-- sidebar -->
+  <aside class="side">
+    <div class="sec">
+      <h4>구조</h4>
+      <div class="node coordnode" id="coordNode">
+        <span class="dot" style="background:var(--coord)"></span>
+        <span class="nm">🗂 전체 조율 (코디네이터)</span>
+      </div>
+    </div>
+    <div class="sec">
+      <h4 style="display:flex;justify-content:space-between">TASK 채팅 <button class="btn sm" id="addTask" style="padding:2px 8px">+ 추가</button></h4>
+      <div id="taskList"></div>
+    </div>
+    <div class="feed">
+      <h4>📢 업데이트 피드 (전체 공유)</h4>
+      <div id="feed"></div>
+    </div>
+  </aside>
+
+  <!-- center: calendar -->
+  <section class="center">
+    <div class="calhead">
+      <button class="btn ghost sm" id="prevM">‹</button>
+      <h2 id="monthLabel"></h2>
+      <button class="btn ghost sm" id="nextM">›</button>
+      <button class="btn ghost sm" id="todayBtn">오늘</button>
+      <button class="btn ghost sm" id="viewToggle">일별 보기</button>
+    </div>
+    <div class="grid" id="cal"></div>
+    <div class="roadmap">
+      <h3>📅 로드맵</h3>
+      <div id="roadmap"></div>
+    </div>
+  </section>
+
+  <!-- right: chat -->
+  <section class="right">
+    <div class="chathead" id="chatHead"></div>
+    <div id="noticeWrap"></div>
+    <div class="chat" id="chat"></div>
+    <div class="quick" id="quick"></div>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="입력… (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
+      <button class="btn" id="send">전송</button>
+    </div>
+  </section>
+</main>
+
+<!-- Settings modal -->
+<div class="overlay" id="setModal">
+  <div class="modal">
+    <h3>⚙ 설정</h3>
+    <div class="field">
+      <label>Anthropic API 키</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-...">
+      <div class="hint">키는 브라우저에 저장되지 않고 <b>config.js 파일에만</b> 보관됩니다. 아래 "🔑 키를 config.js로 저장"을 눌러 파일을 만든 뒤 scheduler.html과 같은 폴더에 두면, 켤 때마다 자동 입력됩니다. (이 창의 "저장"은 현재 세션에만 적용) <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">키 발급</a></div>
+    </div>
+    <div class="field">
+      <label>모델</label>
+      <select id="model">
+        <option value="claude-sonnet-4-6">Sonnet 4.6 (균형, 권장)</option>
+        <option value="claude-opus-4-8">Opus 4.8 (최고 성능)</option>
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5 (빠름·저렴)</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="saveCfgBtn">🔑 키를 config.js로 저장</button>
+      <button class="btn ghost" id="exportBtn">백업 내보내기</button>
+      <button class="btn ghost" id="resetData">데이터 초기화</button>
+      <button class="btn" id="saveSet">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- New task modal -->
+<div class="overlay" id="taskModal">
+  <div class="modal">
+    <h3>🆕 새 task</h3>
+    <div class="field"><label>task 이름</label><input id="tName" placeholder="예: 마라톤 훈련"></div>
+    <div class="field"><label>최종 목표</label><input id="tTitle" placeholder="예: 6주 안에 10km 완주"></div>
+    <div class="field"><label>달성 기한</label><input type="date" id="tDeadline"></div>
+    <div class="field"><label>가용 시간</label><input id="tTime" placeholder="예: 평일 1시간, 주말 2시간"></div>
+    <div class="field"><label>현재 수준 / 제약</label><input id="tStart" placeholder="예: 3km 가능, 수요일 야근"></div>
+    <div class="row">
+      <button class="btn ghost" id="taskCancel">취소</button>
+      <button class="btn" id="taskSave">만들고 계획 받기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day modal -->
+<div class="overlay" id="dayModal">
+  <div class="modal">
+    <h3 id="dayTitle">날짜</h3>
+    <div id="dayGroups"></div>
+    <div class="addrow">
+      <select id="dayTaskSel"></select>
+      <input id="dayInput" placeholder="할 일 추가">
+      <button class="btn" id="dayAdd">추가</button>
+    </div>
+    <div class="row"><button class="btn ghost" id="dayClose">닫기</button></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+const COLORS=['#6c8cff','#3ecf8e','#ff7eb6','#b794f6','#4fd1c5','#f6c244','#ff8a65'];
+const SCHED_PROMPT=`당신은 한 가지 "task"의 목표 스케줄러입니다. 이 task의 최종 목표를 받아 주차별 로드맵과 이번 주 요일별 일간 계획을 측정가능·실행가능하게 세우고, 사용자가 하루/한 주 결과를 보고하면 계획을 수정합니다.
+규칙: 계획은 현실적으로 가용 시간을 넘기지 않습니다. 뒤처져도 자책을 부추기지 않고 차분히 조정합니다. 매번 현재 유효한 계획을 보여주며 끝냅니다. 당신은 '이 task'만 담당하며 다른 task와 직접 소통하지 않습니다(전체 컨텍스트는 참고만). 이 task·스케줄 외 잡담은 정중히 거절합니다. markdown 표·제목(#)·굵게(**) 표시는 쓰지 말고, 이모지 머리말과 줄바꿈 목록(- )으로 읽기 쉽고 간결하게 작성합니다. 한국어.`;
+const COORD_PROMPT=`당신은 여러 task 스케줄을 총괄하는 "코디네이터"입니다. 각 task는 독립적으로 계획을 세우며, 당신은 task 간 일정 충돌과 우선순위 조율만 담당합니다.
+읽기 쉬운 일반 문장으로 짧게 답합니다. markdown 기호(#, ##, **, 표 |)는 절대 쓰지 마세요. 강조가 필요하면 그냥 문장으로 표현합니다.
+먼저 겹치는 일정이나 충돌이 있으면 1~2문장으로 알려주고, 이어서 조정 제안을 "- "로 시작하는 2~3개의 짧은 줄로 제시합니다. 전체 10줄 이내로 간결하게. 한국어.`;
+
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const todayStr=()=>ymd(new Date());
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+let API_KEY='';
+let S=load();
+function blank(){ return {settings:{model:'claude-sonnet-4-6'}, activeType:'coord', coordChat:[], coordNote:'', tasks:[], feed:[]}; }
+function load(){
+  let s;
+  try{ s=Object.assign(blank(), JSON.parse(localStorage.getItem('scheduler_v2'))||{}); }
+  catch(e){ s=blank(); }
+  if(s.settings) delete s.settings.key;
+  const cfg=window.SCHEDULER_CONFIG;
+  if(cfg){
+    if(cfg.apiKey && cfg.apiKey!=='여기에-API-키-붙여넣기') API_KEY=cfg.apiKey;
+    if(cfg.model && !localStorage.getItem('scheduler_v2')) s.settings.model=cfg.model;
+  }
+  return s;
+}
+function save(){ localStorage.setItem('scheduler_v2', JSON.stringify(S)); }
+let viewDate=new Date();
+let viewMode='month';
+
+function activeTask(){ return S.activeType==='coord'?null:S.tasks.find(t=>t.id===S.activeType); }
+function taskColor(t){ return COLORS[S.tasks.indexOf(t)%COLORS.length]; }
+function pushFeed(name,text){ S.feed.unshift({t:new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}),name,text}); S.feed=S.feed.slice(0,40); }
+
+// ---------- sidebar ----------
+function renderSidebar(){
+  $('coordNode').classList.toggle('active',S.activeType==='coord');
+  const list=$('taskList'); list.innerHTML='';
+  if(!S.tasks.length) list.innerHTML='<div style="font-size:12px;color:var(--muted)">task가 없습니다. "+ 추가"로 만드세요.</div>';
+  S.tasks.forEach(t=>{
+    const n=document.createElement('div'); n.className='node'+(S.activeType===t.id?' active':'');
+    n.onclick=()=>{ S.activeType=t.id; save(); renderAll(); };
+    const dot=document.createElement('span'); dot.className='dot'; dot.style.background=taskColor(t);
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=t.name;
+    const del=document.createElement('button'); del.className='del'; del.textContent='✕';
+    del.onclick=e=>{ e.stopPropagation(); if(confirm(`'${t.name}' task를 삭제할까요?`)){ S.tasks=S.tasks.filter(x=>x.id!==t.id); if(S.activeType===t.id)S.activeType='coord'; pushFeed('시스템',`task 삭제: ${t.name}`); save(); renderAll(); } };
+    n.append(dot,nm,del); list.appendChild(n);
+  });
+}
+function renderFeed(){
+  const f=$('feed'); f.innerHTML='';
+  if(!S.feed.length){ f.innerHTML='<div class="fitem">아직 업데이트가 없습니다.</div>'; return; }
+  S.feed.forEach(x=>{ const el=document.createElement('div'); el.className='fitem'; el.innerHTML=`<b>${x.name}</b> · ${x.t}<br>${x.text}`; f.appendChild(el); });
+}
+
+// ---------- calendar (unified, color per task) ----------
+function renderCal(){
+  if(viewMode==='day'){ renderDayView(); return; }
+  $('cal').style.display='grid';
+  const y=viewDate.getFullYear(),m=viewDate.getMonth();
+  $('monthLabel').textContent=`${y}년 ${m+1}월`;
+  const first=new Date(y,m,1),start=new Date(first); start.setDate(1-first.getDay());
+  const cal=$('cal'); cal.innerHTML='';
+  ['일','월','화','수','목','금','토'].forEach(d=>{ const e=document.createElement('div'); e.className='dow'; e.textContent=d; cal.appendChild(e); });
+  for(let i=0;i<42;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i); const key=ymd(d);
+    const cell=document.createElement('div');
+    cell.className='cell'+(d.getMonth()!==m?' out':'')+(key===todayStr()?' today':'');
+    cell.onclick=()=>openDay(key);
+    const dd=document.createElement('div'); dd.className='d'; dd.textContent=d.getDate(); cell.appendChild(dd);
+    const items=itemsForDate(key);
+    items.slice(0,3).forEach(o=>{
+      const el=document.createElement('div'); el.className='task'+(o.item.done?' done':'');
+      el.style.borderLeftColor=o.color; el.style.background=o.color+'22'; el.textContent=o.item.text; cell.appendChild(el);
+    });
+    if(items.length>3){ const e=document.createElement('div'); e.className='more'; e.textContent=`+${items.length-3}개`; cell.appendChild(e); }
+    cal.appendChild(cell);
+  }
+}
+function renderDayView(){
+  const key=ymd(viewDate), dw='일월화수목금토'[viewDate.getDay()];
+  $('monthLabel').textContent=`${viewDate.getFullYear()}년 ${viewDate.getMonth()+1}월 ${viewDate.getDate()}일 (${dw})`;
+  const cal=$('cal'); cal.style.display='block'; cal.innerHTML='';
+  let any=false;
+  S.tasks.forEach(t=>{
+    const arr=t.days[key]||[]; if(!arr.length) return; any=true;
+    const g=document.createElement('div'); g.className='daygroup'; g.style.padding='6px 14px';
+    g.innerHTML=`<div class="gh" style="color:${taskColor(t)}">${t.name}</div>`;
+    arr.forEach(it=>{
+      const row=document.createElement('div'); row.className='dayitem';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=it.done;
+      cb.onchange=()=>{ it.done=cb.checked; save(); renderCal(); };
+      const sp=document.createElement('span'); sp.textContent=it.text; if(it.done)sp.className='done';
+      row.append(cb,sp); g.appendChild(row);
+    });
+    cal.appendChild(g);
+  });
+  if(!any) cal.innerHTML='<div style="color:var(--muted);padding:24px;text-align:center">이 날짜에 할 일이 없습니다. (월별 보기에서 날짜를 클릭해 추가)</div>';
+}
+function itemsForDate(key){
+  const out=[];
+  S.tasks.forEach(t=>{ (t.days[key]||[]).forEach(item=>out.push({task:t,color:taskColor(t),item})); });
+  return out;
+}
+
+// ---------- roadmap ----------
+function renderRoadmap(){
+  const r=$('roadmap'); r.innerHTML='';
+  const at=activeTask();
+  const tasks=at?[at]:S.tasks;
+  if(!tasks.length||tasks.every(t=>!t.roadmap.length)){ r.innerHTML='<div class="rweek" style="color:var(--muted)">로드맵이 없습니다. task에서 계획을 받고 "캘린더에 반영"을 누르세요.</div>'; return; }
+  tasks.forEach(t=>{
+    if(!t.roadmap.length) return;
+    const g=document.createElement('div'); g.className='rgroup';
+    g.innerHTML=`<div class="gh" style="color:${taskColor(t)}">${t.name}</div>`+
+      t.roadmap.map(w=>`<div class="rweek"><b>${w.week}주차</b> · ${w.label}</div>`).join('');
+    r.appendChild(g);
+  });
+}
+
+// ---------- day modal ----------
+let dayKey=null;
+function openDay(key){
+  dayKey=key; $('dayTitle').textContent=key.replace(/-/g,'.');
+  const sel=$('dayTaskSel'); sel.innerHTML='';
+  if(!S.tasks.length){ sel.innerHTML='<option>task 없음</option>'; }
+  else S.tasks.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
+  const at=activeTask(); if(at) sel.value=at.id;
+  renderDayGroups(); $('dayInput').value=''; $('dayModal').classList.add('show');
+}
+function renderDayGroups(){
+  const wrap=$('dayGroups'); wrap.innerHTML='';
+  let any=false;
+  S.tasks.forEach(t=>{
+    const tasks=t.days[dayKey]||[]; if(!tasks.length) return; any=true;
+    const g=document.createElement('div'); g.className='daygroup';
+    g.innerHTML=`<div class="gh" style="color:${taskColor(t)}">${t.name}</div>`;
+    tasks.forEach((it,i)=>{
+      const row=document.createElement('div'); row.className='dayitem';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=it.done;
+      cb.onchange=()=>{ it.done=cb.checked; save(); renderDayGroups(); renderCal(); };
+      const sp=document.createElement('span'); sp.textContent=it.text; if(it.done)sp.className='done';
+      const x=document.createElement('button'); x.className='x'; x.textContent='✕';
+      x.onclick=()=>{ tasks.splice(i,1); if(!tasks.length)delete t.days[dayKey]; save(); renderDayGroups(); renderCal(); };
+      row.append(cb,sp,x); g.appendChild(row);
+    });
+    wrap.appendChild(g);
+  });
+  if(!any) wrap.innerHTML='<div style="color:var(--muted);font-size:12px">이 날짜에 할 일이 없습니다.</div>';
+}
+$('dayAdd').onclick=()=>{
+  const v=$('dayInput').value.trim(); const tid=$('dayTaskSel').value; const t=S.tasks.find(x=>x.id===tid);
+  if(!v||!t) return;
+  (t.days[dayKey]=t.days[dayKey]||[]).push({text:v,done:false});
+  $('dayInput').value=''; save(); renderDayGroups(); renderCal();
+};
+$('dayInput').addEventListener('keydown',e=>{ if(e.key==='Enter')$('dayAdd').click(); });
+$('dayClose').onclick=()=>$('dayModal').classList.remove('show');
+
+// ---------- chat ----------
+function curChat(){ const at=activeTask(); return at?at.chat:S.coordChat; }
+function renderChatHead(){
+  const at=activeTask(); const h=$('chatHead');
+  const color=at?taskColor(at):'var(--coord)';
+  const name=at?at.name:'전체 조율 (코디네이터)';
+  h.innerHTML=`<span class="dot" style="background:${color}"></span><b>${name}</b>`;
+  // notice banner for tasks: coordinator note
+  const nw=$('noticeWrap'); nw.innerHTML='';
+  // quick buttons
+  const q=$('quick'); q.innerHTML='';
+  const btns = at
+    ? [['오늘 끝났어요. 결과 정리할게요.','오늘 끝'],['이번 주 끝났어요. 주간 리뷰해주세요.','이번 주 끝'],['지금 계획을 다시 보여주세요.','계획 보기']]
+    : [['모든 task의 일정 충돌과 우선순위를 점검하고 조정안을 알려주세요.','충돌 점검'],['각 task에 전달할 공지를 정리해주세요.','공지 정리']];
+  btns.forEach(([msg,label])=>{ const b=document.createElement('button'); b.className='btn ghost sm'; b.textContent=label; b.onclick=()=>sendMessage(msg); q.appendChild(b); });
+  if(at){ const b=document.createElement('button'); b.className='btn sm'; b.textContent='📅 캘린더에 반영'; b.onclick=syncTask; q.appendChild(b); }
+}
+function renderChat(){
+  const c=$('chat'); c.innerHTML='';
+  const chat=curChat();
+  if(!chat.length){
+    const at=activeTask();
+    addMsgEl('assistant', at
+      ? `'${at.name}' task 채팅입니다. 진행 상황을 알려주거나 질문하면 계획을 조정해 드려요.`
+      : '코디네이터입니다. 각 task에서 계획이 갱신되면 여기서 전체 일정 충돌과 우선순위를 조율할 수 있어요. task를 먼저 만들어 보세요.');
+  }
+  chat.forEach(m=>addMsgEl(m.role,m.content));
+  c.scrollTop=c.scrollHeight;
+}
+function addMsgEl(role,content){ const el=document.createElement('div'); el.className='msg '+role; el.textContent=content; $('chat').appendChild(el); $('chat').scrollTop=$('chat').scrollHeight; return el; }
+
+async function callAPI(messages,system,maxTokens=1600){
+  if(!API_KEY) throw new Error('NO_KEY');
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'content-type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:S.settings.model,max_tokens:maxTokens,system,messages})
+  });
+  if(!res.ok) throw new Error('API '+res.status+': '+(await res.text()));
+  return (await res.json()).content.map(b=>b.text||'').join('');
+}
+function taskSystem(t){
+  const others=S.tasks.filter(x=>x.id!==t.id);
+  let ctx='\n\n[전체 컨텍스트 — 참고용. 다른 task와 직접 소통하지 마세요]\n';
+  ctx += `당신이 담당하는 task: ${t.name}\n`;
+  ctx += others.length?('다른 진행 중 task:\n'+others.map(o=>`- ${o.name}: 목표=${o.goal?.title||'미정'}, 기한=${o.goal?.deadline||'-'}`).join('\n')):'다른 task 없음';
+  if(S.coordNote) ctx+='\n코디네이터 공지: '+S.coordNote.slice(0,800);
+  return SCHED_PROMPT+ctx;
+}
+function coordSystem(){
+  let ctx='\n\n[현재 모든 task 현황]\n';
+  if(!S.tasks.length) ctx+='task 없음';
+  else ctx+=S.tasks.map(t=>`■ ${t.name} | 목표:${t.goal?.title||'미정'} 기한:${t.goal?.deadline||'-'}\n  로드맵: ${t.roadmap.map(w=>w.week+'주:'+w.label).join(' / ')||'없음'}`).join('\n');
+  ctx+='\n\n[최근 업데이트 피드]\n'+(S.feed.slice(0,12).map(x=>`- ${x.name}: ${x.text}`).join('\n')||'없음');
+  return COORD_PROMPT+ctx;
+}
+async function sendMessage(text){
+  if(!text.trim()) return;
+  if(!API_KEY){ openSettings(); return; }
+  const at=activeTask(); const chat=curChat();
+  chat.push({role:'user',content:text}); save(); addMsgEl('user',text);
+  const load=addMsgEl('assistant','…'); load.classList.add('loading');
+  try{
+    const sys=at?taskSystem(at):coordSystem();
+    const reply=await callAPI(chat.map(m=>({role:m.role,content:m.content})),sys);
+    load.classList.remove('loading'); load.textContent=reply;
+    chat.push({role:'assistant',content:reply});
+    if(!at){ S.coordNote=reply.trim().slice(0,500); pushFeed('코디네이터','조율 내용 갱신'); }
+    save(); if(!at){ renderChatHead(); renderFeed(); }
+  }catch(e){
+    load.classList.remove('loading');
+    load.textContent=e.message==='NO_KEY'?'API 키가 없습니다. 설정에서 입력하세요.':'오류: '+e.message;
+  }
+}
+$('send').onclick=()=>{ const v=$('input').value; $('input').value=''; $('input').style.height='auto'; sendMessage(v); };
+$('input').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('send').click(); } });
+$('input').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px'; });
+
+async function syncTask(){
+  const t=activeTask(); if(!t) return;
+  if(!t.chat.length){ addMsgEl('sys','먼저 계획을 만들어주세요.'); return; }
+  const note=addMsgEl('sys','📅 계획을 캘린더에 반영하는 중…');
+  const instr=`오늘 날짜는 ${todayStr()}입니다. 아래 '${t.name}' task 대화에서 현재 유효한 계획을 추출해 순수 JSON으로만 출력하세요(설명·코드펜스 금지).
+형식: {"roadmap":[{"week":1,"label":"주차 요약"}],"days":{"YYYY-MM-DD":["할 일1","할 일2"]}}
+요일별 일간 계획을 가장 가까운 미래의 실제 날짜로 매핑하세요. 불명확하면 생략.
+
+대화:
+${t.chat.map(m=>(m.role==='user'?'사용자':'스케줄러')+': '+m.content).join('\n')}`;
+  try{
+    const out=await callAPI([{role:'user',content:instr}],'당신은 JSON 추출기입니다. 순수 JSON만 출력합니다.',2000);
+    const json=JSON.parse(out.replace(/^```json?/i,'').replace(/```$/,'').trim());
+    if(Array.isArray(json.roadmap)) t.roadmap=json.roadmap;
+    if(json.days) for(const [k,arr] of Object.entries(json.days)){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+      const done={}; (t.days[k]||[]).forEach(it=>done[it.text]=it.done);
+      t.days[k]=arr.map(x=>({text:String(x),done:!!done[String(x)]}));
+    }
+    pushFeed(t.name,'계획 업데이트 → 캘린더 반영');
+    save(); note.textContent='📅 반영 완료. (코디네이터에서 전체 조율 가능)'; renderAll();
+  }catch(e){ note.textContent='반영 실패: '+e.message; }
+}
+
+function openSettings(){ $('apiKey').value=API_KEY||''; $('model').value=S.settings.model; $('setModal').classList.add('show'); }
+$('setBtn').onclick=openSettings;
+$('saveSet').onclick=()=>{ API_KEY=$('apiKey').value.trim(); S.settings.model=$('model').value; save(); renderHeader(); $('setModal').classList.remove('show'); };
+$('resetData').onclick=()=>{ if(confirm('모든 데이터를 삭제할까요? 되돌릴 수 없습니다.')){ const k=S.settings; S=blank(); S.settings=k; save(); renderAll(); $('setModal').classList.remove('show'); } };
+$('exportBtn').onclick=()=>{ const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='scheduler-backup-'+todayStr()+'.json'; a.click(); };
+$('saveCfgBtn').onclick=()=>{
+  const key=$('apiKey').value.trim()||API_KEY;
+  const model=$('model').value||S.settings.model;
+  if(!key){ alert('먼저 API 키를 입력하세요.'); return; }
+  const cfg=`// 목표 스케줄러 설정 파일 — scheduler.html과 같은 폴더에 두세요.\nwindow.SCHEDULER_CONFIG = {\n  apiKey: ${JSON.stringify(key)},\n  model: ${JSON.stringify(model)}\n};\n`;
+  const blob=new Blob([cfg],{type:'text/javascript'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='config.js'; a.click();
+  alert('config.js 가 다운로드됩니다. scheduler.html과 같은 폴더(기존 config.js를 덮어쓰기)에 두면, 앞으로 켤 때마다 자동으로 키가 입력됩니다.');
+};
+
+$('coordNode').onclick=()=>{ S.activeType='coord'; save(); renderAll(); };
+$('addTask').onclick=()=>{ ['tName','tTitle','tDeadline','tTime','tStart'].forEach(i=>$(i).value=''); $('taskModal').classList.add('show'); };
+$('taskCancel').onclick=()=>$('taskModal').classList.remove('show');
+$('taskSave').onclick=()=>{
+  const name=$('tName').value.trim(), title=$('tTitle').value.trim();
+  if(!name){ alert('task 이름을 입력하세요.'); return; }
+  const t={id:uid(),name,goal:{title,deadline:$('tDeadline').value,time:$('tTime').value.trim(),start:$('tStart').value.trim()},roadmap:[],days:{},chat:[]};
+  S.tasks.push(t); S.activeType=t.id; pushFeed(name,`새 task 생성 — 목표: ${title||'미정'}`); save();
+  $('taskModal').classList.remove('show'); renderAll();
+  if(title){ sendMessage(`최종 목표: ${title}\n기한: ${t.goal.deadline||'미정'}\n가용 시간: ${t.goal.time||'미정'}\n현재 수준/제약: ${t.goal.start||'미정'}\n오늘은 ${todayStr()}입니다. 주차별 로드맵과 이번 주 일간 계획을 짜주세요.`); }
+};
+
+$('prevM').onclick=()=>{ if(viewMode==='day') viewDate.setDate(viewDate.getDate()-1); else viewDate.setMonth(viewDate.getMonth()-1); renderCal(); };
+$('nextM').onclick=()=>{ if(viewMode==='day') viewDate.setDate(viewDate.getDate()+1); else viewDate.setMonth(viewDate.getMonth()+1); renderCal(); };
+$('todayBtn').onclick=()=>{ viewDate=new Date(); renderCal(); };
+$('viewToggle').onclick=()=>{ viewMode=viewMode==='month'?'day':'month'; $('viewToggle').textContent=viewMode==='month'?'일별 보기':'월별 보기'; renderCal(); };
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o)o.classList.remove('show'); }));
+
+function renderHeader(){ $('modelPill').textContent=S.settings.model.replace('claude-','').replace(/-\d{8}$/,''); }
+function renderAll(){ renderHeader(); renderSidebar(); renderFeed(); renderCal(); renderRoadmap(); renderChatHead(); renderChat(); }
+renderAll();
+if(!API_KEY) openSettings();
+</script>
+</body>
+</html>
