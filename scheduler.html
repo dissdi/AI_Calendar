@@ -94,14 +94,17 @@
   .addrow select{flex:none;width:120px}
   .loading{color:var(--muted)}
   .pill{font-size:11px;background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 9px;color:var(--muted)}
+  .iconbtn{padding:5px 8px;font-size:15px;line-height:1}
 </style>
 </head>
 <body>
 <header>
+  <button class="btn ghost sm iconbtn" id="toggleSide" title="사이드바 접기/펼치기">◧</button>
   <h1>🎯 멀티 task 스케줄러</h1>
   <span class="spacer"></span>
   <span class="pill" id="modelPill">—</span>
-  <button class="btn ghost sm" id="setBtn">⚙ 설정</button>
+  <button class="btn ghost sm iconbtn" id="toggleChat" title="채팅 접기/펼치기">◨</button>
+  <button class="btn ghost sm iconbtn" id="setBtn" title="설정">⚙</button>
 </header>
 <main>
   <!-- sidebar -->
@@ -134,7 +137,7 @@
     </div>
     <div class="grid" id="cal"></div>
     <div class="roadmap">
-      <h3>📅 로드맵</h3>
+      <h3 style="display:flex;align-items:center;gap:8px">📅 로드맵 <button class="btn ghost sm" id="rmToggle" style="margin-left:auto;font-weight:400">주차별로 보기</button></h3>
       <div id="roadmap"></div>
     </div>
   </section>
@@ -242,6 +245,7 @@ function load(){
 function save(){ localStorage.setItem('scheduler_v2', JSON.stringify(S)); }
 let viewDate=new Date();
 let viewMode='month';
+let roadmapMode='task';
 
 function activeTask(){ return S.activeType==='coord'?null:S.tasks.find(t=>t.id===S.activeType); }
 function taskColor(t){ return COLORS[S.tasks.indexOf(t)%COLORS.length]; }
@@ -322,15 +326,25 @@ function itemsForDate(key){
 function renderRoadmap(){
   const r=$('roadmap'); r.innerHTML='';
   const at=activeTask();
-  const tasks=at?[at]:S.tasks;
-  if(!tasks.length||tasks.every(t=>!t.roadmap.length)){ r.innerHTML='<div class="rweek" style="color:var(--muted)">로드맵이 없습니다. task에서 계획을 받고 "캘린더에 반영"을 누르세요.</div>'; return; }
-  tasks.forEach(t=>{
-    if(!t.roadmap.length) return;
-    const g=document.createElement('div'); g.className='rgroup';
-    g.innerHTML=`<div class="gh" style="color:${taskColor(t)}">${t.name}</div>`+
-      t.roadmap.map(w=>`<div class="rweek"><b>${w.week}주차</b> · ${w.label}</div>`).join('');
-    r.appendChild(g);
-  });
+  const tasks=(at?[at]:S.tasks).filter(t=>t.roadmap.length);
+  if(!tasks.length){ r.innerHTML='<div class="rweek" style="color:var(--muted)">로드맵이 없습니다. task에서 계획을 받고 "캘린더에 반영"을 누르세요.</div>'; return; }
+  if(roadmapMode==='week'){
+    const weeks={};
+    tasks.forEach(t=>t.roadmap.forEach(w=>{ (weeks[w.week]=weeks[w.week]||[]).push({t,label:w.label}); }));
+    Object.keys(weeks).map(Number).sort((x,y)=>x-y).forEach(wk=>{
+      const g=document.createElement('div'); g.className='rgroup';
+      g.innerHTML=`<div class="gh">${wk}주차</div>`+
+        weeks[wk].map(o=>`<div class="rweek" style="border-left:3px solid ${taskColor(o.t)};padding-left:7px"><b style="color:${taskColor(o.t)}">${o.t.name}</b> · ${o.label}</div>`).join('');
+      r.appendChild(g);
+    });
+  } else {
+    tasks.forEach(t=>{
+      const g=document.createElement('div'); g.className='rgroup';
+      g.innerHTML=`<div class="gh" style="color:${taskColor(t)}">${t.name}</div>`+
+        t.roadmap.map(w=>`<div class="rweek"><b>${w.week}주차</b> · ${w.label}</div>`).join('');
+      r.appendChild(g);
+    });
+  }
 }
 
 // ---------- day modal ----------
@@ -505,6 +519,9 @@ $('prevM').onclick=()=>{ if(viewMode==='day') viewDate.setDate(viewDate.getDate(
 $('nextM').onclick=()=>{ if(viewMode==='day') viewDate.setDate(viewDate.getDate()+1); else viewDate.setMonth(viewDate.getMonth()+1); renderCal(); };
 $('todayBtn').onclick=()=>{ viewDate=new Date(); renderCal(); };
 $('viewToggle').onclick=()=>{ viewMode=viewMode==='month'?'day':'month'; $('viewToggle').textContent=viewMode==='month'?'일별 보기':'월별 보기'; renderCal(); };
+$('toggleSide').onclick=()=>{ const e=document.querySelector('.side'); e.style.display=(e.style.display==='none')?'flex':'none'; };
+$('toggleChat').onclick=()=>{ const e=document.querySelector('.right'); e.style.display=(e.style.display==='none')?'flex':'none'; };
+$('rmToggle').onclick=()=>{ roadmapMode=roadmapMode==='task'?'week':'task'; $('rmToggle').textContent=roadmapMode==='task'?'주차별로 보기':'task별로 보기'; renderRoadmap(); };
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o)o.classList.remove('show'); }));
 
 function renderHeader(){ $('modelPill').textContent=S.settings.model.replace('claude-','').replace(/-\d{8}$/,''); }
